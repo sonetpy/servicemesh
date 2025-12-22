@@ -1,0 +1,150 @@
+---
+# Fancy Istio namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: canary-zone
+  labels:
+    istio-injection: enabled
+    demo: canary
+---
+# v1 – GREEN STABLE
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-world-v1
+  namespace: canary-zone
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hello-world
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: hello-world
+        version: v1
+    spec:
+      containers:
+      - name: app
+        image: paulbouwer/hello-kubernetes:1.10
+        env:
+        - name: MESSAGE
+          value: "STABLE v1 – GREEN"
+        - name: BACKGROUND_COLOR
+          value: "#90EE90"
+        ports:
+        - containerPort: 8080
+---
+# v2 – BLUE CANARY
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-world-v2
+  namespace: canary-zone
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hello-world
+      version: v2
+  template:
+    metadata:
+      labels:
+        app: hello-world
+        version: v2
+    spec:
+      containers:
+      - name: app
+        image: paulbouwer/hello-kubernetes:1.10
+        env:
+        - name: MESSAGE
+          value: "CANARY v2 – BLUE"
+        - name: BACKGROUND_COLOR
+          value: "#87CEEB"
+        ports:
+        - containerPort: 8080
+---
+# Service – name port "http-8080"
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello-world
+  namespace: canary-zone
+spec:
+  selector:
+    app: hello-world
+  ports:
+  - name: http-8080
+    port: 80
+    targetPort: 8080
+---
+# Istio Gateway
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: hello-world-gateway
+  namespace: canary-zone
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "hello-world.canary.example.com"
+---
+# DestinationRule – subsets
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: hello-world
+  namespace: canary-zone
+spec:
+  host: hello-world.canary-zone.svc.cluster.local
+  subsets:
+  - name: v1
+    labels:
+      version: v1
+  - name: v2
+    labels:
+      version: v2
+---
+# VirtualService – 90% v1, 10% v2 + header routing
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: hello-world
+  namespace: canary-zone
+spec:
+  hosts:
+  - "hello-world.canary.example.com"
+  gateways:
+  - hello-world-gateway
+  http:
+  - match:
+    - headers:
+        x-version:
+          exact: v2
+    route:
+    - destination:
+        host: hello-world.canary-zone.svc.cluster.local
+        subset: v2
+        port:
+          number: 80
+  - route:
+    - destination:
+        host: hello-world.canary-zone.svc.cluster.local
+        subset: v1
+        port:
+          number: 80
+      weight: 90
+    - destination:
+        host: hello-world.canary-zone.svc.cluster.local
+        subset: v2
+        port:
+          number: 80
+      weight: 10

@@ -1,0 +1,205 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: resilience-retry
+  labels:
+    istio-injection: "enabled"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: customer
+  namespace: resilience-retry
+  labels:
+    app: customer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: customer
+  template:
+    metadata:
+      labels:
+        app: customer
+    spec:
+      containers:
+      - name: customer
+        image: quay.io/redhattraining/ossm-customer:1.0
+        imagePullPolicy: Always
+        env:
+        - name: JAVA_OPTIONS
+          value: -Xms15m -Xmx15m -Xmn15m
+        ports:
+        - containerPort: 8080
+          name: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: customer
+  namespace: resilience-retry
+  labels:
+    app: customer
+spec:
+  selector:
+    app: customer
+  ports:
+  - name: http
+    port: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: preference
+  namespace: resilience-retry
+  labels:
+    app: preference
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: preference
+  template:
+    metadata:
+      labels:
+        app: preference
+    spec:
+      containers:
+      - name: preference
+        image: quay.io/redhattraining/ossm-preference:1.0
+        imagePullPolicy: Always
+        env:
+        - name: JAVA_OPTIONS
+          value: -Xms15m -Xmx15m -Xmn15m
+        ports:
+        - containerPort: 8080
+          name: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: preference
+  namespace: resilience-retry
+  labels:
+    app: preference
+spec:
+  selector:
+    app: preference
+  ports:
+  - name: http
+    port: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: recommendation
+  namespace: resilience-retry
+  labels:
+    app: recommendation
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: recommendation
+  template:
+    metadata:
+      labels:
+        app: recommendation
+    spec:
+      containers:
+      - name: recommendation
+        image: quay.io/redhattraining/ossm-recommendation:1.0
+        imagePullPolicy: Always
+        env:
+        - name: JAVA_OPTIONS
+          value: -Xms15m -Xmx15m -Xmn15m
+        ports:
+        - containerPort: 8080
+          name: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: recommendation
+  namespace: resilience-retry
+  labels:
+    app: recommendation
+spec:
+  selector:
+    app: recommendation
+  ports:
+  - name: http
+    port: 8080
+---
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: customer-gateway
+  namespace: resilience-retry
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      name: http
+      protocol: HTTP
+      number: 80
+    hosts:
+    - "retry.local.test"
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: customer-vs
+  namespace: resilience-retry
+spec:
+  hosts:
+  - "retry.local.test"
+  gateways:
+  - customer-gateway
+  http:
+  - match:
+    - uri:
+        prefix: /resilience-retry
+    rewrite:
+      uri: /
+    route:
+    - destination:
+        host: customer.resilience-retry.svc.cluster.local
+        port:
+          number: 8080
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: preference-vs
+  namespace: resilience-retry
+spec:
+  hosts:
+  - preference
+  http:
+  - route:
+    - destination:
+        host: preference.resilience-retry.svc.cluster.local
+        port:
+          number: 8080
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: recommendation-vs
+  namespace: resilience-retry
+spec:
+  hosts:
+  - recommendation
+  http:
+  - fault:
+      abort:
+        percentage:
+          value: 90
+        httpStatus: 500
+    route:
+    - destination:
+        host: recommendation.resilience-retry.svc.cluster.local
+        port:
+          number: 8080

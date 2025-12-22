@@ -1,0 +1,144 @@
+# 🧩-----------------------------------------------
+# Namespace (Istio sidecar injection enabled)
+# -----------------------------------------------
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mesh-abtest
+  labels:
+    istio-injection: enabled
+---
+# 🌐-----------------------------------------------
+# Gateway: listens on port 80 for host abtest.mesh.local
+# Uses default Istio ingressgateway (port 80 -> targetPort 8080)
+# -----------------------------------------------
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: abtest-gateway
+  namespace: mesh-abtest
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 80              # external client port (HTTP)
+      name: http
+      protocol: HTTP
+    hosts:
+    - "abtest.mesh.local"
+---
+# 🧱-----------------------------------------------
+# Service: single logical endpoint for both versions
+# -----------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-svc
+  namespace: mesh-abtest
+spec:
+  selector:
+    app: demo
+  ports:
+  - port: 80
+    targetPort: 5678
+---
+# 🧭-----------------------------------------------
+# DestinationRule: defines subsets (v1 stable / v2 beta)
+# -----------------------------------------------
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: demo-destination
+  namespace: mesh-abtest
+spec:
+  host: demo-svc.mesh-abtest.svc.cluster.local
+  subsets:
+  - name: v1
+    labels:
+      version: v1
+  - name: v2
+    labels:
+      version: v2
+---
+# 🚀-----------------------------------------------
+# Deployment v1 – stable users
+# -----------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-v1
+  namespace: mesh-abtest
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: demo
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: demo
+        version: v1
+    spec:
+      containers:
+      - name: echo
+        image: hashicorp/http-echo:0.2.3
+        args: ["-text=demo v1 - stable"]
+        ports:
+        - containerPort: 5678
+---
+# 🧪-----------------------------------------------
+# Deployment v2 – beta users
+# -----------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-v2
+  namespace: mesh-abtest
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: demo
+      version: v2
+  template:
+    metadata:
+      labels:
+        app: demo
+        version: v2
+    spec:
+      containers:
+      - name: echo
+        image: hashicorp/http-echo:0.2.3
+        args: ["-text=demo v2 - beta"]
+        ports:
+        - containerPort: 5678
+---
+# 🔀-----------------------------------------------
+# VirtualService: routes beta users to v2, others to v1
+# -----------------------------------------------
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: demo-vs-targeted
+  namespace: mesh-abtest
+spec:
+  hosts:
+  - "abtest.mesh.local"
+  gateways:
+  - abtest-gateway
+  http:
+  - match:
+    - headers:
+        X-User-Type:
+          exact: "beta"
+    route:
+    - destination:
+        host: demo-svc.mesh-abtest.svc.cluster.local
+        subset: v2
+  - route:
+    - destination:
+        host: demo-svc.mesh-abtest.svc.cluster.local
+        subset: v1
+

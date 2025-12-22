@@ -1,0 +1,17 @@
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: recommendation
+  namespace: chaos-error
+spec:
+  hosts:
+  - recommendation
+  http:
+  - fault:
+      abort:
+        httpStatus: 500
+        percentage:
+          value: 50.0
+    route:
+    - destination:
+        host: recommendation

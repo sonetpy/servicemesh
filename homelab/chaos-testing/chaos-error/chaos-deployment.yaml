@@ -1,0 +1,268 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: chaos-error
+  labels:
+    istio-injection: "enabled"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: customer
+    version: v1
+  name: customer
+  namespace: chaos-error
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: customer
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: customer
+        version: v1
+      annotations:
+        sidecar.istio.io/inject: "true"
+    spec:
+      containers:
+      - env:
+        - name: JAVA_OPTIONS
+          value: -Xms15m -Xmx15m -Xmn15m
+        name: customer
+        image: quay.io/redhattraining/ossm-customer:1.0
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+        - containerPort: 8778
+          name: jolokia
+        - containerPort: 9779
+          name: prometheus
+        livenessProbe:
+          exec:
+            command:
+            - curl
+            - localhost:8080/health/live
+          initialDelaySeconds: 5
+          periodSeconds: 4
+        readinessProbe:
+          exec:
+            command:
+            - curl
+            - localhost:8080/health/ready
+          initialDelaySeconds: 6
+          periodSeconds: 5
+        securityContext:
+          privileged: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: customer
+  namespace: chaos-error
+  labels:
+    app: customer
+spec:
+  ports:
+  - name: http
+    port: 8080
+  selector:
+    app: customer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: preference
+    version: v1
+  name: preference
+  namespace: chaos-error
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: preference
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: preference
+        version: v1
+      annotations:
+        sidecar.istio.io/inject: "true"
+    spec:
+      containers:
+      - env:
+        - name: JAVA_OPTIONS
+          value: -Xms15m -Xmx15m -Xmn15m
+        name: preference
+        image: quay.io/redhattraining/ossm-preference:1.0
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+        - containerPort: 8778
+          name: jolokia
+        - containerPort: 9779
+          name: prometheus
+        livenessProbe:
+          exec:
+            command:
+            - curl
+            - localhost:8080/health/live
+        readinessProbe:
+          exec:
+            command:
+            - curl
+            - localhost:8080/health/ready
+        securityContext:
+          privileged: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: preference
+  namespace: chaos-error
+  labels:
+    app: preference
+spec:
+  ports:
+  - name: http
+    port: 8080
+  selector:
+    app: preference
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: recommendation
+    version: v1
+  name: recommendation
+  namespace: chaos-error
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: recommendation
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: recommendation
+        version: v1
+      annotations:
+        sidecar.istio.io/inject: "true"
+    spec:
+      containers:
+      - env:
+        - name: JAVA_OPTIONS
+          value: -Xms15m -Xmx15m -Xmn15m
+        name: recommendation
+        image: quay.io/redhattraining/ossm-recommendation:1.0
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+        - containerPort: 8778
+          name: jolokia
+        - containerPort: 9779
+          name: prometheus
+        livenessProbe:
+          exec:
+            command:
+            - curl
+            - localhost:8080/health/live
+        readinessProbe:
+          exec:
+            command:
+            - curl
+            - localhost:8080/health/ready
+        securityContext:
+          privileged: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: recommendation
+  namespace: chaos-error
+  labels:
+    app: recommendation
+spec:
+  ports:
+  - name: http
+    port: 8080
+  selector:
+    app: recommendation
+---
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: chaos-gateway
+  namespace: chaos-error
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "chaos.example.com"
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: customer-virtualservice
+  namespace: chaos-error
+spec:
+  hosts:
+  - "chaos.example.com"
+  gateways:
+  - chaos-gateway
+  http:
+  - match:
+    - uri:
+        prefix: /chaos
+    retries:
+      attempts: 0
+    rewrite:
+      uri: /
+    route:
+    - destination:
+        host: customer
+        port:
+          number: 8080
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: preference-virtualservice
+  namespace: chaos-error
+spec:
+  hosts:
+  - preference
+  http:
+  - retries:
+      attempts: 0
+    route:
+    - destination:
+        host: preference
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: recommendation
+  namespace: chaos-error
+spec:
+  hosts:
+  - recommendation
+  http:
+  - route:
+    - destination:
+        host: recommendation

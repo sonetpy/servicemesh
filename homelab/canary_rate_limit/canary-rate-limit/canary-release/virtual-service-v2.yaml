@@ -1,0 +1,24 @@
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: vertx-greet
+  namespace: canary-release
+spec:
+  hosts:
+  - "canary.release.local"
+  gateways:
+  - vertx-greet-gateway
+  http:
+  - route:
+    - destination:
+        host: vertx-greet
+        subset: v1
+        port:
+          number: 8080
+      weight: 80
+    - destination:
+        host: vertx-greet
+        subset: v2
+        port:
+          number: 8080
+      weight: 20

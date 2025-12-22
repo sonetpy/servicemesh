@@ -1,0 +1,155 @@
+# release-dark-vertx-greet-1rep.yaml
+---
+# Deployment v1 (primary) - 1 replica
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vertx-greet-v1
+  namespace: release-dark
+  labels:
+    app: vertx-greet
+    version: v1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vertx-greet
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: vertx-greet
+        version: v1
+      annotations:
+        sidecar.istio.io/inject: "true"
+    spec:
+      containers:
+      - name: vertx-greet
+        image: quay.io/redhattraining/ossm-vertx-greet:1.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+        env:
+        - name: APP_VERSION
+          value: "v1"
+        - name: GREETING
+          value: "Hello from v1 🌍"
+
+---
+# Deployment v2 (shadow) - 1 replica
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vertx-greet-v2
+  namespace: release-dark
+  labels:
+    app: vertx-greet
+    version: v2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vertx-greet
+      version: v2
+  template:
+    metadata:
+      labels:
+        app: vertx-greet
+        version: v2
+      annotations:
+        sidecar.istio.io/inject: "true"
+    spec:
+      containers:
+      - name: vertx-greet
+        image: quay.io/redhattraining/ossm-vertx-greet:1.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+        env:
+        - name: APP_VERSION
+          value: "v2-shadow"
+        - name: GREETING
+          value: "Hola Mundo! (v2 shadow) 🌮"
+
+---
+# Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: vertx-greet
+  namespace: release-dark
+  labels:
+    app: vertx-greet
+spec:
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  selector:
+    app: vertx-greet
+
+---
+# DestinationRule (subsets)
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: vertx-greet-destination
+  namespace: release-dark
+spec:
+  host: vertx-greet
+  subsets:
+  - name: v1
+    labels:
+      version: v1
+  - name: v2
+    labels:
+      version: v2
+
+---
+# Gateway (meaningful hostname)
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: release-dark-gateway
+  namespace: release-dark
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "greet.release-dark.local"
+
+---
+# VirtualService (mirrors 10% -> v2, serves from v1)
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: vertx-greet-vs
+  namespace: release-dark
+spec:
+  hosts:
+  - "greet.release-dark.local"
+  gateways:
+  - release-dark-gateway
+  http:
+  - match:
+    - uri:
+        prefix: "/"
+    route:
+    - destination:
+        host: vertx-greet
+        subset: v1
+        port:
+          number: 8080
+      weight: 100
+    mirror:
+      host: vertx-greet
+      subset: v2
+    mirrorPercentage:
+      value: 10
+

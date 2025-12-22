@@ -1,0 +1,43 @@
+# hello-world.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-world
+  namespace: tesla
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hello-world
+  template:
+    metadata:
+      labels:
+        app: hello-world
+    spec:
+      containers:
+      - name: hello-world
+        image: crccheck/hello-world
+        ports:
+        - containerPort: 8000
+        volumeMounts:
+        - name: data
+          mountPath: /data
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: test-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello-world
+  namespace: tesla
+spec:
+  selector:
+    app: hello-world
+  ports:
+    - protocol: TCP
+      port: 80           # Service port
+      targetPort: 8000   # Container port
+      nodePort: 30080    # <── FIXED external port (30000-32767)
+  type: LoadBalancer       # <── THIS GIVES EXTERNAL IP

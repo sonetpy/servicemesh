@@ -1,0 +1,22 @@
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  creationTimestamp: "2025-12-09T18:34:03Z"
+  generation: 3
+  name: preference-vs
+  namespace: resilience-timeout
+  resourceVersion: "505951"
+  uid: 2b2f27b0-904c-4380-926c-8424eac92bbc
+spec:
+  hosts:
+    - preference
+  http:
+    - retries:
+        attempts: 100
+        perTryTimeout: 2s
+        retryOn: 5xx
+      route:
+        - destination:
+            host: preference
+            port:
+              number: 8080

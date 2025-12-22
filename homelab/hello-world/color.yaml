@@ -1,0 +1,73 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: colorful-pvc
+  namespace: tesla
+spec:
+  accessModes: [ReadWriteMany]
+  resources:
+    requests:
+      storage: 2Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: colorful-hello
+  namespace: tesla
+  labels:
+    app: colorful-hello
+    version: v1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: colorful-hello
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: colorful-hello
+        version: v1
+    spec:
+      containers:
+      - name: hello
+        image: hashicorp/http-echo:1.0
+        args:
+        - "-text=\u001b[32m🌈 GREEN CANARY v1 🌈\u001b[0m"
+        - "-listen=:8080"
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        - name: data
+          mountPath: /data
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: colorful-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: colorful-hello-lb
+  namespace: tesla
+spec:
+  type: LoadBalancer
+  selector:
+    app: colorful-hello
+  ports:
+  - port: 80
+    targetPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: colorful-hello-clusterip
+  namespace: tesla
+spec:
+  type: ClusterIP
+  selector:
+    app: colorful-hello
+  ports:
+  - port: 80
+    targetPort: 8080

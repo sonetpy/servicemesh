@@ -1,0 +1,91 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: resilience-break
+  labels:
+    istio-injection: enabled
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vertx-greet-v1
+  namespace: resilience-break
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vertx-greet
+  template:
+    metadata:
+      labels:
+        app: vertx-greet
+        version: v1
+      annotations:
+        sidecar.istio.io/inject: "true"
+    spec:
+      containers:
+        - name: vertx-greet
+          image: quay.io/redhattraining/ossm-vertx-greet:1.0
+          imagePullPolicy: Always
+          env:
+            - name: MAX_REQUESTS_PER_SECOND
+              value: "2"
+          securityContext:
+            privileged: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vertx-greet
+  namespace: resilience-break
+  labels:
+    app: vertx-greet
+spec:
+  selector:
+    app: vertx-greet
+  ports:
+    - name: http
+      port: 8080
+      protocol: TCP
+      targetPort: 8080
+---
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: vertx-greet-gateway
+  namespace: resilience-break
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - circuit-break.example.com
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: vertx-greet
+  namespace: resilience-break
+spec:
+  hosts:
+    - circuit-break.example.com
+  gateways:
+    - vertx-greet-gateway
+  http:
+    - route:
+        - destination:
+            host: vertx-greet
+            port:
+              number: 8080
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: vertx-greet
+  namespace: resilience-break
+spec:
+  host: vertx-greet
