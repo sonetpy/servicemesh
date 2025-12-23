@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: sleep
+  namespace: secure-mtls
+  labels:
+    app: sleep
+spec:
+  selector:
+    app: sleep
+  ports:
+  - name: http
+    port: 80
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sleep
+  namespace: secure-mtls
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sleep
+  template:
+    metadata:
+      labels:
+        app: sleep
+      annotations:
+        sidecar.istio.io/inject: "false"   # Key line: no sidecar!
+    spec:
+      containers:
+      - name: sleep
+        image: quay.io/redhattraining/ossm-curl:1.0
+        command: ["/bin/sleep", "infinity"]
