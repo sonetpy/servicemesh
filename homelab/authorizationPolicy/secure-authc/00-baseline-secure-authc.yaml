@@ -1,0 +1,201 @@
+# -------------------------
+# Service Accounts
+# -------------------------
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: customer-sa
+  namespace: secure-authc
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: preference-sa
+  namespace: secure-authc
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: recommendation-sa
+  namespace: secure-authc
+
+# -------------------------
+# Customer Deployment + Service
+# -------------------------
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: customer
+  namespace: secure-authc
+  labels:
+    app: customer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: customer
+  template:
+    metadata:
+      labels:
+        app: customer
+      annotations:
+        sidecar.istio.io/inject: "true"
+    spec:
+      serviceAccountName: customer-sa
+      containers:
+      - name: customer
+        image: quay.io/redhattraining/ossm-customer:1.0
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: customer
+  namespace: secure-authc
+spec:
+  selector:
+    app: customer
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+
+# -------------------------
+# Preference Deployment + Service
+# -------------------------
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: preference
+  namespace: secure-authc
+  labels:
+    app: preference
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: preference
+  template:
+    metadata:
+      labels:
+        app: preference
+      annotations:
+        sidecar.istio.io/inject: "true"
+    spec:
+      serviceAccountName: preference-sa
+      containers:
+      - name: preference
+        image: quay.io/redhattraining/ossm-preference:1.0
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: preference
+  namespace: secure-authc
+spec:
+  selector:
+    app: preference
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+
+# -------------------------
+# Recommendation Deployment + Service
+# -------------------------
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: recommendation
+  namespace: secure-authc
+  labels:
+    app: recommendation
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: recommendation
+  template:
+    metadata:
+      labels:
+        app: recommendation
+      annotations:
+        sidecar.istio.io/inject: "true"
+    spec:
+      serviceAccountName: recommendation-sa
+      containers:
+      - name: recommendation
+        image: quay.io/redhattraining/ossm-recommendation:1.0
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: recommendation
+  namespace: secure-authc
+spec:
+  selector:
+    app: recommendation
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+
+# -------------------------
+# Gateway (NO wildcard)
+# -------------------------
+---
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: customer-gateway
+  namespace: secure-authc
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - authzpolicy.mtls.test
+
+# -------------------------
+# VirtualService
+# -------------------------
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: customer-vs
+  namespace: secure-authc
+spec:
+  hosts:
+  - authzpolicy.mtls.test
+  gateways:
+  - customer-gateway
+  http:
+  - match:
+    - uri:
+        prefix: /secure-authc
+    rewrite:
+      uri: /
+    route:
+    - destination:
+        host: customer
+        port:
+          number: 8080
