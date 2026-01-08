@@ -1,0 +1,21 @@
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: observe-jaeger-vs
+  namespace: tracing
+spec:
+  hosts:
+  - "tracing.jaeger"
+  gateways:
+  - observe-jaeger-gateway
+  http:
+  - match:
+    - uri:
+        exact: /trace
+    rewrite:
+      uri: /
+    route:
+    - destination:
+        host: servicea
+        port:
+          number: 8080
