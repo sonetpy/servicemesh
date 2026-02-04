@@ -1,0 +1,16 @@
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: hotrod-vs
+  namespace: tracing-demo
+spec:
+  hosts:
+  - hotrod.tracing.demo
+  gateways:
+  - hotrod-gateway
+  http:
+  - route:
+    - destination:
+        host: hotrod.tracing-demo.svc.cluster.local
+        port:
+          number: 8080

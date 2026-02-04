@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-a
+  namespace: tracing-a
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: app-a
+  template:
+    metadata:
+      labels:
+        app: app-a
+    spec:
+      containers:
+      - name: app
+        image: hashicorp/http-echo
+        args:
+          - "-text=hello from app A"
+        ports:
+        - containerPort: 5678
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-a
+  namespace: tracing-a
+spec:
+  selector:
+    app: app-a
+  ports:
+  - port: 80
+    targetPort: 5678
+---
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: tracing-a-gateway
+  namespace: tracing-a
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "app-a.local"
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: tracing-a-vs
+  namespace: tracing-a
+spec:
+  hosts:
+  - "app-a.local"
+  gateways:
+  - tracing-a-gateway
+  http:
+  - route:
+    - destination:
+        host: app-a
+        port:
+          number: 80
