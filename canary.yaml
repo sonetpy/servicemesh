@@ -1,0 +1,150 @@
+# -----------------------------
+# Namespace with Istio Injection
+# -----------------------------
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: hello-istio
+  labels:
+    istio-injection: enabled
+
+---
+# -----------------------------
+# Deployment v1
+# -----------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-v1
+  namespace: hello-istio
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hello
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: hello
+        version: v1
+    spec:
+      containers:
+      - name: hello
+        image: docker.io/hashicorp/http-echo
+        args:
+          - "-text=Hello from v1"
+        ports:
+        - containerPort: 5678
+
+---
+# -----------------------------
+# Deployment v2
+# -----------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-v2
+  namespace: hello-istio
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hello
+      version: v2
+  template:
+    metadata:
+      labels:
+        app: hello
+        version: v2
+    spec:
+      containers:
+      - name: hello
+        image: docker.io/hashicorp/http-echo
+        args:
+          - "-text=Hello from v2"
+        ports:
+        - containerPort: 5678
+
+---
+# -----------------------------
+# Service
+# -----------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello
+  namespace: hello-istio
+spec:
+  selector:
+    app: hello
+  ports:
+  - port: 80
+    targetPort: 5678
+
+---
+# -----------------------------
+# Istio Gateway
+# -----------------------------
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: hello-gateway
+  namespace: hello-istio
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "canary.test"
+
+---
+# -----------------------------
+# DestinationRule (subsets)
+# -----------------------------
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: hello-dr
+  namespace: hello-istio
+spec:
+  host: hello
+  subsets:
+  - name: v1
+    labels:
+      version: v1
+  - name: v2
+    labels:
+      version: v2
+
+---
+# -----------------------------
+# VirtualService (30:70 split)
+# -----------------------------
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: hello-vs
+  namespace: hello-istio
+spec:
+  hosts:
+  - "canary.test"
+  gateways:
+  - hello-gateway
+  http:
+  - route:
+    - destination:
+        host: hello
+        subset: v1
+      weight: 30
+    - destination:
+        host: hello
+        subset: v2
+      weight: 70
+
+
+# for i in {1..10}; do curl -H "Host: canary.test" http://192.168.20.40; done
